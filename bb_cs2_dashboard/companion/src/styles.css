@@ -1,0 +1,165 @@
+* { box-sizing: border-box; }
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  background: #06080d;
+  color: #eef2ff;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+}
+button { font: inherit; cursor: pointer; }
+
+/* ── App shell ── */
+.app {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 12px 14px calc(20px + env(safe-area-inset-bottom));
+}
+
+/* ── Top bar ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #151b28;
+}
+.topbar-brand { font-size: 16px; font-weight: 800; letter-spacing: -0.03em; }
+.topbar-sub { color: #8a96ad; font-size: 12px; }
+.live-pill {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(40, 214, 178, 0.15);
+  color: #7dffd8;
+  border: 1px solid rgba(40, 214, 178, 0.35);
+}
+
+/* ── Status messages ── */
+.lead, .empty, .panel-placeholder { font-size: 13px; line-height: 1.5; color: #7f8da6; }
+.lead { color: #9aa8c0; margin: 0 0 14px; }
+.warn { color: #f0c674; font-size: 13px; margin: 0 0 12px; }
+.error { color: #ff8a8a; font-size: 13px; margin: 0 0 12px; }
+
+/* ── Content + Grid ── */
+.content { flex: 1; }
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+.grid-full { grid-column: 1 / -1; }
+
+/* Tablet: 2-column grid (matches desktop layout) */
+@media (min-width: 640px) {
+  .grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* ── Panel (shared card — matches desktop client) ── */
+.panel {
+  border: 1px solid #1b2433;
+  background: linear-gradient(180deg, #0e141f 0%, #0a0f18 100%);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.panel-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 750;
+  color: #c5d0e8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.panel-placeholder { margin: 0; }
+
+/* ── Badge ── */
+.badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid #273042;
+  color: #8a96ad;
+}
+.badge--live { color: #7dffd8; border-color: rgba(40, 214, 178, 0.5); }
+.badge--online { color: #6b8fff; border-color: rgba(107, 143, 255, 0.5); }
+.badge--soon { color: #ffcf7a; border-color: rgba(255, 207, 122, 0.35); }
+.badge--offline { color: #ff8a8a; border-color: rgba(255, 138, 138, 0.35); }
+.badge--idle { color: #8a96ad; border-color: #273042; }
+
+/* ── Stat grid ── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+@media (min-width: 400px) {
+  .stat-grid { grid-template-columns: repeat(4, 1fr); }
+}
+.stat-cell {
+  border: 1px solid #202838;
+  border-radius: 10px;
+  padding: 10px;
+  background: #090d15;
+}
+.stat-cell.accent { border-color: rgba(40, 214, 178, 0.3); }
+.stat-cell b { display: block; font-size: 20px; line-height: 1.1; letter-spacing: -0.03em; }
+.stat-cell span { color: #8a96ad; font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; }
+
+/* Phone compact: smaller stat cells */
+@media (max-width: 399px) {
+  .stat-cell { padding: 8px; }
+  .stat-cell b { font-size: 18px; }
+}
+
+/* ── WASD keys ── */
+.keys-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.key {
+  min-width: 34px;
+  text-align: center;
+  border: 1px solid #273042;
+  border-radius: 8px;
+  padding: 8px 6px;
+  color: #667085;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+}
+.key.active { color: #061018; background: #28d6b2; border-color: #5eecc8; }
+
+/* ── Server panel ── */
+.server-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.server-map { font-weight: 700; font-size: 14px; color: #dce7ff; }
+.server-count { color: #8a96ad; font-size: 12px; }
+.player-list { display: grid; gap: 6px; max-height: 300px; overflow: auto; }
+.player-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #202838;
+  background: #090d15;
+  color: #dce7ff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.player-row:hover { border-color: #3d4d66; }
+.player-row.selected { border-color: #28d6b2; background: #0f241f; }
+.player-row em { color: #8a96ad; font-style: normal; font-size: 12px; }

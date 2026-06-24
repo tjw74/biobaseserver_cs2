@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CS2 bot game</title>
+    <style>
+      :root {
+        --bg: #000000;
+        --fg: #f2f2f2;
+        --muted: #9a9a9a;
+        --line: #2a2a2a;
+        --accent: #3d8fd1;
+        --danger: #c44;
+        --ok: #3a3;
+        --radius: 10px;
+        --space: 1.25rem;
+        --maxw: 42rem;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        font-size: 16px;
+        line-height: 1.5;
+        padding: var(--space);
+      }
+      .wrap {
+        max-width: var(--maxw);
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin: 0 0 0.5rem 0;
+        letter-spacing: -0.02em;
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 0.9rem;
+        margin-bottom: 2rem;
+      }
+      .status-card {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        background: #0a0a0a;
+      }
+      .headline {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin: 0 0 1.25rem 0;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+      }
+      @media (max-width: 480px) {
+        .row {
+          grid-template-columns: 1fr;
+        }
+      }
+      .metric {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.9rem 1rem;
+        background: #000;
+      }
+      .metric .label {
+        color: var(--muted);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 0.35rem;
+      }
+      .metric .value {
+        font-size: 1.5rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+        border: none;
+        border-radius: 8px;
+        padding: 0.85rem 1.4rem;
+        min-height: 48px;
+        min-width: 8rem;
+        font-weight: 600;
+      }
+      .btn-start {
+        background: var(--accent);
+        color: #fff;
+      }
+      .btn-start:hover {
+        filter: brightness(1.1);
+      }
+      .btn-start:disabled,
+      .btn-stop:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .btn-stop {
+        background: #1a1a1a;
+        color: var(--fg);
+        border: 1px solid var(--line);
+      }
+      .btn-stop:hover {
+        background: #222;
+      }
+      .msg {
+        font-size: 0.9rem;
+        min-height: 1.4em;
+        color: var(--muted);
+        margin-top: 0.5rem;
+      }
+      .msg.err {
+        color: #e88;
+      }
+      .msg.ok {
+        color: #8c8;
+      }
+      .detail {
+        margin-top: 2rem;
+        font-size: 0.8rem;
+        color: var(--muted);
+        border-top: 1px solid var(--line);
+        padding-top: 1rem;
+      }
+      .detail pre {
+        margin: 0.5rem 0 0 0;
+        white-space: pre-wrap;
+        word-break: break-all;
+        max-height: 8rem;
+        overflow: auto;
+        font-size: 0.72rem;
+        color: #777;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>CS2 bot game</h1>
+      <p class="sub">Start or stop the bot match. The game server keeps running.</p>
+
+      <div class="status-card" id="card">
+        <p class="headline" id="headline">Loading…</p>
+        <div class="row">
+          <div class="metric">
+            <div class="label">Humans</div>
+            <div class="value" id="humans">—</div>
+          </div>
+          <div class="metric">
+            <div class="label">Bots</div>
+            <div class="value" id="bots">—</div>
+          </div>
+          <div class="metric">
+            <div class="label">Map</div>
+            <div class="value" id="map" style="font-size: 1.1rem; word-break: break-word">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="btn-start" id="btnStart" disabled>Start bot game</button>
+        <button type="button" class="btn-stop" id="btnStop" disabled>Stop bot game</button>
+      </div>
+      <p class="msg" id="msg"></p>
+
+      <div class="detail" id="detailBlock" hidden>
+        <div>RCON output (only on error)</div>
+        <pre id="rawPre"></pre>
+      </div>
+    </div>
+
+    <script>
+      const TOKEN_KEY = "bb_cs2_control_token";
+      const msgEl = document.getElementById("msg");
+      const rawPre = document.getElementById("rawPre");
+      const detailBlock = document.getElementById("detailBlock");
+      const btnStart = document.getElementById("btnStart");
+      const btnStop = document.getElementById("btnStop");
+
+      function getHeaders() {
+        const h = { "Content-Type": "application/json" };
+        const t = sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+        if (t) h["X-Api-Key"] = t;
+        return h;
+      }
+
+      function setMsg(text, kind) {
+        msgEl.textContent = text;
+        msgEl.className = "msg" + (kind ? " " + kind : "");
+      }
+
+      let pollTimer;
+
+      async function loadStatus() {
+        btnStart.disabled = true;
+        btnStop.disabled = true;
+        try {
+          const r = await fetch("api/status", { headers: getHeaders() });
+          const d = await r.json();
+          document.getElementById("headline").textContent = d.headline || "—";
+          document.getElementById("humans").textContent =
+            d.humans !== null && d.humans !== undefined ? d.humans : "—";
+          document.getElementById("bots").textContent =
+            d.bots !== null && d.bots !== undefined ? d.bots : "—";
+          document.getElementById("map").textContent = d.map || "—";
+          if (d.rcon_ok === false && d.raw) {
+            rawPre.textContent = d.raw;
+            detailBlock.hidden = false;
+          } else {
+            detailBlock.hidden = true;
+          }
+          if (d.rcon_ok === false) {
+            setMsg("RCON could not get status. Is the game server up?", "err");
+          } else {
+            setMsg("Updated. Auto-refresh on.", "");
+          }
+        } catch (e) {
+          setMsg("Could not load status. Check network and this page URL.", "err");
+        } finally {
+          btnStart.disabled = false;
+          btnStop.disabled = false;
+        }
+      }
+
+      async function postAction(path) {
+        btnStart.disabled = true;
+        btnStop.disabled = true;
+        setMsg("Working…", "");
+        try {
+          const r = await fetch(path, { method: "POST", headers: getHeaders() });
+          const d = await r.json().catch(() => ({}));
+          if (r.status === 401) {
+            const t = window.prompt("Control token (set on server, or clear to skip if none):");
+            if (t) {
+              sessionStorage.setItem(TOKEN_KEY, t);
+            }
+            setMsg("Unauthorized — set token and try again.", "err");
+            await loadStatus();
+            return;
+          }
+          if (!r.ok) {
+            setMsg(d.error || d.detail || "Request failed", "err");
+            await loadStatus();
+            return;
+          }
+          setMsg(d.message || "OK", "ok");
+          await loadStatus();
+        } catch (e) {
+          setMsg("Request failed. Check this page and RCON from the same host as the game.", "err");
+        } finally {
+          btnStart.disabled = false;
+          btnStop.disabled = false;
+        }
+      }
+
+      btnStart.addEventListener("click", () => postAction("api/bots/start"));
+      btnStop.addEventListener("click", () => postAction("api/bots/stop"));
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") loadStatus();
+      });
+
+      clearInterval(pollTimer);
+      pollTimer = setInterval(loadStatus, 8000);
+      loadStatus();
+    </script>
+  </body>
+</html>

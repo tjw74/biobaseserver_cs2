@@ -1,0 +1,41 @@
+"ServerCfg"
+{
+ // Biobase: default mode Vanilla (VNL) — near-stock CS2 movement. See https://docs.cs2kz.org/systems/modes
+ // Upstream template: https://github.com/KZGlobalTeam/cs2kz-metamod/blob/master/cfg/cs2kz-server-config.txt
+ "defaultMode" "Vanilla"
+
+ "defaultStyles" ""
+ "defaultTimeLimit" "60.0"
+ "defaultLanguage" "en"
+ "tipInterval" "75"
+ "defaultJSSoundMinTier" "4"
+ "defaultJSMinTier" "2"
+ "defaultJSMinTierConsole" "1"
+ "defaultJSBroadcastMinTier" "5"
+ "defaultJSBroadcastMinTierConsole" "5"
+ "defaultJSBroadcastSoundMinTier" "5"
+ "chatPrefix" "{lime}KZ {grey}|{default}"
+ "overridePlayerChat" "true"
+ "maxManualReplays" "2"
+ "maxRunReplaysPerGroup" "3"
+ "maxJumpReplaysPerCategory" "3"
+ "archiveRetentionMinutes" "2880"
+ "defaultFOV" "90"
+ "minFOV" "80"
+ "maxFOV" "130"
+
+ "db"
+ {
+ "driver" "sqlite"
+ "database" "cs2kz"
+ "host" "192.168.1.8"
+ "user" "root"
+ "pass" "root"
+ }
+
+ "apiUrl" "https://api.cs2kz.org"
+ "apiKey" ""
+
+ "racingCoordinatorUrl" ""
+ "racingSecret" ""
+}

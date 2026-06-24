@@ -1,0 +1,10 @@
+FROM cm2network/steamcmd:latest
+USER root
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      ca-certificates procps xvfb xauth ffmpeg \
+      libnss3 libxss1 libasound2 libgbm1 libgl1-mesa-dri libvulkan1 mesa-vulkan-drivers vulkan-tools \
+    && rm -rf /var/lib/apt/lists/*
+COPY render_inside_container.sh /usr/local/bin/render_inside_container.sh
+RUN chmod 755 /usr/local/bin/render_inside_container.sh
+ENTRYPOINT ["/usr/local/bin/render_inside_container.sh"]

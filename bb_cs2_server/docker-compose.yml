@@ -1,0 +1,122 @@
+services:
+  bb_cs2_server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bb-cs2-server:local
+    container_name: bb_cs2_server
+    environment:
+      SRCDS_TOKEN: ${SRCDS_TOKEN:-}
+      CS2_SERVERNAME: ${CS2_SERVERNAME:-Biobase CS2}
+      CS2_RCONPW: ${CS2_RCONPW:-changeme}
+      CS2_CHEATS: ${CS2_CHEATS:-0}
+      BB_CS2_SERVER_PROFILE: ${BB_CS2_SERVER_PROFILE:-play}
+      BB_CS2_ENABLE_MATCHZY: ${BB_CS2_ENABLE_MATCHZY:-1}
+      CS2_LAN: ${CS2_LAN:-0}
+      CS2_MAXPLAYERS: ${CS2_MAXPLAYERS:-16}
+      CS2_SERVER_HIBERNATE: ${CS2_SERVER_HIBERNATE:-0}
+      CS2_BOT_QUOTA: ${CS2_BOT_QUOTA:-10}
+      CS2_BOT_QUOTA_MODE: ${CS2_BOT_QUOTA_MODE:-fill}
+      CS2_BOT_DIFFICULTY: ${CS2_BOT_DIFFICULTY:-1}
+      CS2_STARTMAP: ${CS2_STARTMAP:-de_mirage}
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: ${DOTNET_SYSTEM_GLOBALIZATION_INVARIANT:-1}
+      CS2_ADDITIONAL_ARGS: "${CS2_ADDITIONAL_ARGS:-+exec biobase_startup}"
+    ports:
+      - "27015:27015/tcp"
+      - "27015:27015/udp"
+      - "27020:27020/udp"
+    volumes:
+      - cs2_data:/home/steam/cs2-dedicated
+      - ./pre.sh:/home/steam/cs2-dedicated/pre.sh:ro
+    networks:
+      - default
+      - biobase_internal
+    restart: unless-stopped
+
+  bb_cs2_control:
+    build:
+      context: ./control
+      dockerfile: Dockerfile
+    image: bb-cs2-control:local
+    container_name: bb_cs2_control
+    environment:
+      RCON_HOST: bb_cs2_server
+      RCON_PORT: "27015"
+      RCON_PASSWORD: ${CS2_RCONPW:-changeme}
+      CS2_BOT_QUOTA: ${CS2_BOT_QUOTA:-10}
+      CS2_BOT_QUOTA_MODE: ${CS2_BOT_QUOTA_MODE:-fill}
+      CS2_BOT_DIFFICULTY: ${CS2_BOT_DIFFICULTY:-1}
+      BB_CS2_SERVER_PROFILE: ${BB_CS2_SERVER_PROFILE:-}
+      CS2_CHEATS: ${CS2_CHEATS:-}
+      BB_CS2_CONTROL_TOKEN: ${BB_CS2_CONTROL_TOKEN:-}
+    ports:
+      - "${BB_CS2_CONTROL_PORT:-8765}:8765"
+    depends_on:
+      - bb_cs2_server
+    networks:
+      - default
+      - biobase_internal
+    restart: unless-stopped
+
+  bb_cs2_renderer:
+    profiles: ["render"]
+    build:
+      context: ../bb_cs2_dashboard/render_workers
+      dockerfile: Dockerfile.renderer
+    image: ${BB_RENDER_IMAGE:-bb-cs2-renderer:local}
+    entrypoint: ["/bin/true"]
+
+  bb_cs2_dashboard:
+    build:
+      context: ../bb_cs2_dashboard
+      dockerfile: Dockerfile
+      args:
+        VITE_DASHBOARD_BASE: ${VITE_DASHBOARD_BASE:-/admin/}
+    image: bb-cs2-dashboard:local
+    container_name: bb_cs2_dashboard
+    environment:
+      CS2_CONTROL_URL: http://bb_cs2_control:8765
+      CS2_CONTROL_TOKEN: ${BB_CS2_CONTROL_TOKEN:-}
+      BB_CS2_DASHBOARD_TOKEN: ${BB_CS2_DASHBOARD_TOKEN:-changeme}
+      BB_CS2_DASHBOARD_USER: ${BB_CS2_DASHBOARD_USER:-}
+      BB_DASHBOARD_ROOT_PATH: ${BB_DASHBOARD_ROOT_PATH:-/admin}
+      BB_DASHBOARD_COOKIE_SECURE: ${BB_DASHBOARD_COOKIE_SECURE:-0}
+      BB_CLIPS_UPLOAD_DIR: ${BB_CLIPS_UPLOAD_DIR:-/data/clips}
+      BB_CLIPS_VM_PATH: ${BB_CLIPS_HOST_DIR:-./data/clips}
+      BB_DEMO_PARSE_MAX_MB: ${BB_DEMO_PARSE_MAX_MB:-2048}
+      BB_DASHBOARD_MAX_UPLOAD_MB: ${BB_DASHBOARD_MAX_UPLOAD_MB:-2048}
+      BB_DEMO_PARSER_COMPARE_TIMEOUT_SEC: ${BB_DEMO_PARSER_COMPARE_TIMEOUT_SEC:-300}
+      BB_DEMO_RENDER_COMMAND: ${BB_DEMO_RENDER_COMMAND:-/app/render_workers/cs2_video_render.sh {demo} {output}}
+      BB_DEMO_STEAM_PLAYBACK_COMMAND: ${BB_DEMO_STEAM_PLAYBACK_COMMAND:-}
+      BB_DEMO_STEAM_VIEWER_URL: ${BB_DEMO_STEAM_VIEWER_URL:-}
+      BB_RENDER_IMAGE: ${BB_RENDER_IMAGE:-bb-cs2-renderer:local}
+      BB_CS2_CLIENT_DIR: ${BB_CS2_CLIENT_DIR:-}
+      BB_STEAM_RUNTIME_DIR: ${BB_STEAM_RUNTIME_DIR:-}
+      BB_RENDER_WIDTH: ${BB_RENDER_WIDTH:-1280}
+      BB_RENDER_HEIGHT: ${BB_RENDER_HEIGHT:-720}
+      BB_RENDER_FPS: ${BB_RENDER_FPS:-30}
+      BB_RENDER_MAX_SECONDS: ${BB_RENDER_MAX_SECONDS:-900}
+      BB_CLIENT_PAIRING_CODE: ${BB_CLIENT_PAIRING_CODE:-BIOBASE-TRY}
+      BB_CS2_CONNECT_HOST: ${BB_CS2_CONNECT_HOST:-localhost}
+      BB_CS2_CONNECT_PORT: ${BB_CS2_CONNECT_PORT:-27015}
+    ports:
+      - "${BB_CS2_DASHBOARD_PORT:-8780}:8780"
+    volumes:
+      - ${BB_CLIPS_HOST_DIR:-./data/clips}:/data/clips:rw
+      # Docker socket required for live movement feed (reads container logs)
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker:ro
+    depends_on:
+      - bb_cs2_control
+    networks:
+      - default
+      - biobase_internal
+    restart: unless-stopped
+
+volumes:
+  cs2_data:
+
+networks:
+  biobase_internal:
+    name: biobase_internal
+    driver: bridge

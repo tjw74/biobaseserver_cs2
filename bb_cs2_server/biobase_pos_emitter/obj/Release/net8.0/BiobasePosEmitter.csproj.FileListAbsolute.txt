@@ -1,0 +1,10 @@
+/src/bb_cs2_plugins/biobase_pos_emitter/obj/Release/net8.0/BiobasePosEmitter.csproj.AssemblyReference.cache
+/src/bb_cs2_plugins/biobase_pos_emitter/obj/Release/net8.0/BiobasePosEmitter.GeneratedMSBuildEditorConfig.editorconfig
+/src/bb_cs2_plugins/biobase_pos_emitter/obj/Release/net8.0/BiobasePosEmitter.csproj.CoreCompileInputs.cache
+/src/bb_cs2_plugins/biobase_pos_emitter/bin/Release/net8.0/BiobasePosEmitter.deps.json
+/src/bb_cs2_plugins/biobase_pos_emitter/bin/Release/net8.0/BiobasePosEmitter.dll
+/src/bb_cs2_plugins/biobase_pos_emitter/bin/Release/net8.0/BiobasePosEmitter.pdb
+/src/bb_cs2_plugins/biobase_pos_emitter/obj/Release/net8.0/BiobasePosEmitter.dll
+/src/bb_cs2_plugins/biobase_pos_emitter/obj/Release/net8.0/refint/BiobasePosEmitter.dll
+/src/bb_cs2_plugins/biobase_pos_emitter/obj/Release/net8.0/BiobasePosEmitter.pdb
+/src/bb_cs2_plugins/biobase_pos_emitter/obj/Release/net8.0/ref/BiobasePosEmitter.dll

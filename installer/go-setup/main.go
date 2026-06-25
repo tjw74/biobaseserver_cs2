@@ -126,10 +126,8 @@ func main() {
 	}
 	done()
 
-	// Hide Docker Desktop GUI — user should never see it
-	if runtime.GOOS == "windows" {
-		exec.Command("taskkill", "/IM", "Docker Desktop.exe", "/F").Run()
-	}
+	// Minimize Docker Desktop — keep engine running, hide the window
+	minimizeDockerWindow()
 
 	// Health check
 	step("Waiting for CS2 server")
@@ -391,10 +389,33 @@ func launchDockerDesktop() {
 	}
 	for _, p := range dockerDesktopPaths() {
 		if _, err := os.Stat(p); err == nil {
-			exec.Command(p).Start()
+			if runtime.GOOS == "windows" {
+				ps := fmt.Sprintf(`Start-Process -FilePath '%s' -WindowStyle Minimized`, p)
+				exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-Command", ps).Start()
+				go minimizeDockerWindow()
+			} else {
+				exec.Command(p).Start()
+			}
 			return
 		}
 	}
+}
+
+func minimizeDockerWindow() {
+	time.Sleep(10 * time.Second)
+	if runtime.GOOS != "windows" {
+		return
+	}
+	ps := `
+$sig = '[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);'
+Add-Type -MemberDefinition $sig -Name Win32 -Namespace Native -ErrorAction SilentlyContinue
+Get-Process "Docker Desktop" -ErrorAction SilentlyContinue | ForEach-Object {
+    if ($_.MainWindowHandle -ne 0) {
+        [Native.Win32]::ShowWindow($_.MainWindowHandle, 6) | Out-Null
+    }
+}
+`
+	exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-Command", ps).Run()
 }
 
 func step(format string, args ...any) {

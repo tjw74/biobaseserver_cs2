@@ -64,24 +64,32 @@ func main() {
 	// Docker
 	step("Checking Docker")
 	if !dockerAvailable() {
-		fmt.Println()
-		fmt.Println("       Docker Desktop is required but not installed.")
-		fmt.Println("       Downloading Docker Desktop installer...")
-		fmt.Println()
-		if err := installDocker(); err != nil {
-			fmt.Println("       Automatic install failed. Please install manually:")
-			fmt.Println("       https://www.docker.com/products/docker-desktop/")
+		// Docker CLI not in PATH — check if Docker Desktop is installed on disk
+		if dockerDesktopInstalled() {
+			fmt.Println("       Docker Desktop found. Starting it...")
+			addDockerToPath()
+			launchDockerDesktop()
+		} else {
 			fmt.Println()
-			fmt.Println("       After installing Docker Desktop, run this setup again.")
-			return
+			fmt.Println("       Installing Docker Desktop...")
+			fmt.Println()
+			if err := installDocker(); err != nil {
+				fmt.Println("       Automatic install failed. Please install manually:")
+				fmt.Println("       https://www.docker.com/products/docker-desktop/")
+				fmt.Println()
+				fmt.Println("       After installing Docker Desktop, run this setup again.")
+				return
+			}
+			fmt.Println("       Docker Desktop installed.")
+			addDockerToPath()
+			launchDockerDesktop()
 		}
-		fmt.Println("       Docker Desktop installed. It may require a restart.")
 	}
 
 	if !dockerRunning() {
 		launchDockerDesktop()
 		fmt.Println("       Waiting for Docker engine to start...")
-		if !waitForDocker(180) {
+		if !waitForDocker(300) {
 			// Docker installed but engine won't start — needs restart for WSL2
 			fmt.Println()
 			fmt.Println("       Windows must restart to finish Docker setup.")
@@ -221,6 +229,34 @@ func extractZip(data []byte, dest string) error {
 	return nil
 }
 
+func dockerDesktopInstalled() bool {
+	for _, p := range dockerDesktopPaths() {
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func dockerDesktopPaths() []string {
+	return []string{
+		filepath.Join(os.Getenv("ProgramFiles"), "Docker", "Docker", "Docker Desktop.exe"),
+		filepath.Join(os.Getenv("ProgramFiles(x86)"), "Docker", "Docker", "Docker Desktop.exe"),
+		filepath.Join(os.Getenv("LOCALAPPDATA"), "Docker", "Docker Desktop.exe"),
+	}
+}
+
+func addDockerToPath() {
+	dockerCLI := filepath.Join(os.Getenv("ProgramFiles"), "Docker", "Docker", "resources", "bin")
+	if _, err := os.Stat(dockerCLI); err == nil {
+		os.Setenv("PATH", dockerCLI+";"+os.Getenv("PATH"))
+	}
+	dockerCLI2 := filepath.Join(os.Getenv("ProgramFiles"), "Docker", "Docker", "resources", "cli-plugins")
+	if _, err := os.Stat(dockerCLI2); err == nil {
+		os.Setenv("PATH", dockerCLI2+";"+os.Getenv("PATH"))
+	}
+}
+
 func dockerAvailable() bool {
 	cmd := exec.Command("docker", "version")
 	cmd.Stdout = io.Discard
@@ -301,12 +337,7 @@ func scheduleResumeAfterRestart(installDir string) {
 }
 
 func launchDockerDesktop() {
-	paths := []string{
-		filepath.Join(os.Getenv("ProgramFiles"), "Docker", "Docker", "Docker Desktop.exe"),
-		filepath.Join(os.Getenv("ProgramFiles(x86)"), "Docker", "Docker", "Docker Desktop.exe"),
-		filepath.Join(os.Getenv("LOCALAPPDATA"), "Docker", "Docker Desktop.exe"),
-	}
-	for _, p := range paths {
+	for _, p := range dockerDesktopPaths() {
 		if _, err := os.Stat(p); err == nil {
 			exec.Command(p).Start()
 			return

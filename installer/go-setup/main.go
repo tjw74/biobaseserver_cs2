@@ -126,6 +126,11 @@ func main() {
 	}
 	done()
 
+	// Hide Docker Desktop GUI — user should never see it
+	if runtime.GOOS == "windows" {
+		exec.Command("taskkill", "/IM", "Docker Desktop.exe", "/F").Run()
+	}
+
 	// Health check
 	step("Waiting for CS2 server")
 	ready := waitForPort("127.0.0.1:27015", 600)
@@ -133,6 +138,16 @@ func main() {
 		done()
 	} else {
 		fmt.Println("       (server may still be downloading CS2 files)")
+	}
+
+	// Add firewall rule so Windows doesn't prompt the user
+	if runtime.GOOS == "windows" {
+		exec.Command("netsh", "advfirewall", "firewall", "add", "rule",
+			"name=BioBase CS2 Server", "dir=in", "action=allow",
+			"protocol=TCP", "localport=27015,8780").Run()
+		exec.Command("netsh", "advfirewall", "firewall", "add", "rule",
+			"name=BioBase CS2 Server UDP", "dir=in", "action=allow",
+			"protocol=UDP", "localport=27015").Run()
 	}
 
 	// Success

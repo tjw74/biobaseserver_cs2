@@ -25,27 +25,53 @@ var serverZip []byte
 var stdin = bufio.NewReader(os.Stdin)
 var dockerLaunched bool
 
+var (
+	jsonMode    bool
+	noPrompt    bool
+	currentStep string
+)
+
+func init() {
+	for _, arg := range os.Args[1:] {
+		switch arg {
+		case "--json":
+			jsonMode = true
+			noPrompt = true
+		case "--no-prompt":
+			noPrompt = true
+		}
+	}
+}
+
 func main() {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("\n  [ERROR] %v\n", r)
+			if jsonMode {
+				emitJSON(map[string]any{"type": "error", "message": fmt.Sprintf("%v", r)})
+			} else {
+				fmt.Printf("\n  [ERROR] %v\n", r)
+			}
 		}
-		fmt.Println("\n  Press Enter to close.")
-		stdin.ReadString('\n')
+		if !noPrompt {
+			fmt.Println("\n  Press Enter to close.")
+			stdin.ReadString('\n')
+		}
 	}()
 
-	fmt.Println()
-	fmt.Println("  =============================================")
-	fmt.Println("       BioBase CS2 Server — Installing")
-	fmt.Println("  =============================================")
-	fmt.Println()
+	if !jsonMode {
+		fmt.Println()
+		fmt.Println("  =============================================")
+		fmt.Println("       BioBase CS2 Server — Installing")
+		fmt.Println("  =============================================")
+		fmt.Println()
+	}
 
 	installDir := defaultInstallDir()
 	rconPw := randomPassword()
 	dashPw := randomPassword()
 
 	// Extract
-	step("Extracting server files to %s", installDir)
+	step("extract", "Extracting server files to %s", installDir)
 	if err := extractZip(serverZip, installDir); err != nil {
 		fail("Extract failed: %v", err)
 		return
@@ -53,10 +79,17 @@ func main() {
 	done()
 
 	// Config
-	step("Generating configuration")
+	step("config", "Generating configuration")
 	envPath := filepath.Join(installDir, "bb_cs2_server", ".env")
 	if _, err := os.Stat(envPath); err == nil {
-		fmt.Println("       (existing .env found — keeping it)")
+		info("existing .env found — keeping it")
+		env := readEnvFile(envPath)
+		if v, ok := env["CS2_RCONPW"]; ok {
+			rconPw = v
+		}
+		if v, ok := env["BB_CS2_DASHBOARD_TOKEN"]; ok {
+			dashPw = v
+		}
 	} else {
 		writeEnv(envPath, rconPw, dashPw)
 	}
@@ -64,25 +97,20 @@ func main() {
 	done()
 
 	// Docker
-	step("Checking Docker")
+	step("docker", "Checking Docker")
 	if !dockerAvailable() {
-		// Docker CLI not in PATH — check if Docker Desktop is installed on disk
 		if dockerDesktopInstalled() {
-			fmt.Println("       Docker Desktop found. Starting it...")
+			info("Docker Desktop found. Starting it...")
 			addDockerToPath()
 			launchDockerDesktop()
 		} else {
-			fmt.Println()
-			fmt.Println("       Installing Docker Desktop...")
-			fmt.Println()
+			info("Installing Docker Desktop...")
 			if err := installDocker(); err != nil {
-				fmt.Println("       Automatic install failed. Please install manually:")
-				fmt.Println("       https://www.docker.com/products/docker-desktop/")
-				fmt.Println()
-				fmt.Println("       After installing Docker Desktop, run this setup again.")
+				fail("Docker install failed: %v", err)
+				info("Install Docker Desktop manually: https://www.docker.com/products/docker-desktop/")
 				return
 			}
-			fmt.Println("       Docker Desktop installed.")
+			info("Docker Desktop installed.")
 			addDockerToPath()
 			launchDockerDesktop()
 		}
@@ -90,15 +118,23 @@ func main() {
 
 	if !dockerRunning() {
 		launchDockerDesktop()
-		fmt.Println("       Waiting for Docker engine to start...")
+		info("Waiting for Docker engine to start...")
 		if !waitForDocker(300) {
-			// Docker installed but engine won't start — needs restart for WSL2
-			fmt.Println()
-			fmt.Println("       Windows must restart to finish Docker setup.")
-			fmt.Println("       Setup will resume automatically after restart.")
+			if jsonMode {
+				emitJSON(map[string]any{
+					"type":    "restart_required",
+					"message": "Windows must restart to finish Docker setup.",
+				})
+			} else {
+				fmt.Println()
+				fmt.Println("       Windows must restart to finish Docker setup.")
+				fmt.Println("       Setup will resume automatically after restart.")
+			}
 			scheduleResumeAfterRestart(installDir)
-			fmt.Println()
-			fmt.Println("       Restarting in 10 seconds...")
+			if !jsonMode {
+				fmt.Println()
+				fmt.Println("       Restarting in 10 seconds...")
+			}
 			time.Sleep(10 * time.Second)
 			exec.Command("shutdown", "/r", "/t", "0").Run()
 			return
@@ -107,38 +143,36 @@ func main() {
 	done()
 
 	// Build and start containers
-	fmt.Println()
-	step("Building and starting containers")
-	fmt.Println("       First run downloads ~30 GB of CS2 server files.")
-	fmt.Println("       This will take a while. Do not close this window.")
-	fmt.Println()
+	step("build", "Building and starting containers")
+	info("First run downloads ~30 GB of CS2 server files.")
 
 	composeFile := filepath.Join(installDir, "bb_cs2_server", "docker-compose.yml")
 	cmd := exec.Command("docker", "compose", "-f", composeFile, "up", "-d", "--build")
 	cmd.Dir = filepath.Join(installDir, "bb_cs2_server")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	if !jsonMode {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
 	cmd.Env = append(os.Environ(), "BB_CLIPS_HOST_DIR="+filepath.Join(installDir, "data", "clips"))
 	if err := cmd.Run(); err != nil {
 		fail("Container build failed: %v", err)
-		fmt.Println("       Make sure Docker Desktop is running and try again.")
 		return
 	}
 	done()
 
-	// Minimize Docker Desktop — keep engine running, hide the window
+	// Minimize Docker Desktop
 	minimizeDockerWindow()
 
 	// Health check
-	step("Waiting for CS2 server")
+	step("health", "Waiting for CS2 server")
 	ready := waitForPort("127.0.0.1:27015", 600)
 	if ready {
 		done()
 	} else {
-		fmt.Println("       (server may still be downloading CS2 files)")
+		info("server may still be downloading CS2 files")
 	}
 
-	// Add firewall rule so Windows doesn't prompt the user
+	// Firewall rules
 	if runtime.GOOS == "windows" {
 		exec.Command("netsh", "advfirewall", "firewall", "add", "rule",
 			"name=BioBase CS2 Server", "dir=in", "action=allow",
@@ -148,22 +182,33 @@ func main() {
 			"protocol=UDP", "localport=27015").Run()
 	}
 
-	// Success
-	fmt.Println()
-	fmt.Println("  =============================================")
-	fmt.Println("       BioBase CS2 Server is running!")
-	fmt.Println("  =============================================")
-	fmt.Println()
-	fmt.Println("    Game server      localhost:27015")
-	fmt.Println("    Dashboard        http://localhost:8780/admin")
-	fmt.Printf("    RCON password    %s\n", rconPw)
-	fmt.Printf("    Dashboard pass   %s\n", dashPw)
-	fmt.Println()
-	fmt.Printf("    Install dir      %s\n", installDir)
-	fmt.Printf("    Config file      %s\n", filepath.Join(installDir, "bb_cs2_server", ".env"))
-	fmt.Println()
-	fmt.Println("    Edit .env to change server name, map, passwords, etc.")
-	fmt.Println("    Then restart:  docker compose -f <compose-path> up -d")
+	// Complete
+	if jsonMode {
+		emitJSON(map[string]any{
+			"type":               "complete",
+			"install_dir":        installDir,
+			"rcon_password":      rconPw,
+			"dashboard_password": dashPw,
+			"game_port":          27015,
+			"dashboard_port":     8780,
+		})
+	} else {
+		fmt.Println()
+		fmt.Println("  =============================================")
+		fmt.Println("       BioBase CS2 Server is running!")
+		fmt.Println("  =============================================")
+		fmt.Println()
+		fmt.Println("    Game server      localhost:27015")
+		fmt.Println("    Dashboard        http://localhost:8780/admin")
+		fmt.Printf("    RCON password    %s\n", rconPw)
+		fmt.Printf("    Dashboard pass   %s\n", dashPw)
+		fmt.Println()
+		fmt.Printf("    Install dir      %s\n", installDir)
+		fmt.Printf("    Config file      %s\n", filepath.Join(installDir, "bb_cs2_server", ".env"))
+		fmt.Println()
+		fmt.Println("    Edit .env to change server name, map, passwords, etc.")
+		fmt.Println("    Then restart:  docker compose -f <compose-path> up -d")
+	}
 }
 
 func defaultInstallDir() string {
@@ -211,6 +256,24 @@ BB_CLIENT_PAIRING_CODE=BIOBASE-TRY
 `, rconPw, dashPw)
 	os.MkdirAll(filepath.Dir(path), 0o755)
 	os.WriteFile(path, []byte(content), 0o644)
+}
+
+func readEnvFile(path string) map[string]string {
+	env := make(map[string]string)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return env
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if idx := strings.Index(line, "="); idx > 0 {
+			env[line[:idx]] = line[idx+1:]
+		}
+	}
+	return env
 }
 
 func extractZip(data []byte, dest string) error {
@@ -302,8 +365,10 @@ Start-Process -FilePath $out -ArgumentList 'install','--quiet','--accept-license
 Remove-Item $out -Force -ErrorAction SilentlyContinue
 `
 	cmd := exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-Command", ps)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	if !jsonMode {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
 	return cmd.Run()
 }
 
@@ -314,9 +379,13 @@ func waitForDocker(timeoutSec int) bool {
 			return true
 		}
 		time.Sleep(5 * time.Second)
-		fmt.Print(".")
+		if !jsonMode {
+			fmt.Print(".")
+		}
 	}
-	fmt.Println()
+	if !jsonMode {
+		fmt.Println()
+	}
 	return false
 }
 
@@ -334,7 +403,6 @@ func waitForPort(addr string, timeoutSec int) bool {
 }
 
 func scheduleResumeAfterRestart(installDir string) {
-	// Copy ourselves to the install dir so the RunOnce key survives Downloads cleanup
 	self, err := os.Executable()
 	if err != nil {
 		return
@@ -346,7 +414,6 @@ func scheduleResumeAfterRestart(installDir string) {
 			os.WriteFile(dest, data, 0o755)
 		}
 	}
-	// RunOnce key — Windows runs this once on next login, then deletes the key
 	regCmd := fmt.Sprintf(`reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v BioBaseCS2Setup /t REG_SZ /d "\"%s\"" /f`, dest)
 	exec.Command("cmd", "/c", regCmd).Run()
 }
@@ -418,14 +485,45 @@ Get-Process "Docker Desktop" -ErrorAction SilentlyContinue | ForEach-Object {
 	exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-Command", ps).Run()
 }
 
-func step(format string, args ...any) {
-	fmt.Printf("  [..] "+format+"\n", args...)
+// ── Output helpers ──
+
+func emitJSON(data map[string]any) {
+	b, _ := json.Marshal(data)
+	fmt.Println(string(b))
+}
+
+func step(id, format string, args ...any) {
+	currentStep = id
+	msg := fmt.Sprintf(format, args...)
+	if jsonMode {
+		emitJSON(map[string]any{"type": "step", "id": id, "status": "start", "message": msg})
+	} else {
+		fmt.Printf("  [..] %s\n", msg)
+	}
 }
 
 func done() {
-	fmt.Println("  [OK]")
+	if jsonMode {
+		emitJSON(map[string]any{"type": "step", "id": currentStep, "status": "done"})
+	} else {
+		fmt.Println("  [OK]")
+	}
 }
 
 func fail(format string, args ...any) {
-	fmt.Printf("  [FAIL] "+format+"\n", args...)
+	msg := fmt.Sprintf(format, args...)
+	if jsonMode {
+		emitJSON(map[string]any{"type": "error", "id": currentStep, "message": msg})
+	} else {
+		fmt.Printf("  [FAIL] %s\n", msg)
+	}
+}
+
+func info(format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	if jsonMode {
+		emitJSON(map[string]any{"type": "info", "id": currentStep, "message": msg})
+	} else {
+		fmt.Printf("       %s\n", msg)
+	}
 }

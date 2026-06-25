@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/big"
@@ -22,6 +23,7 @@ import (
 var serverZip []byte
 
 var stdin = bufio.NewReader(os.Stdin)
+var dockerLaunched bool
 
 func main() {
 	defer func() {
@@ -283,7 +285,7 @@ $out = Join-Path $env:TEMP 'DockerDesktopInstaller.exe'
 Write-Host '       Downloading... (this may take a few minutes)'
 Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing
 Write-Host '       Installing...'
-Start-Process -FilePath $out -ArgumentList 'install','--quiet','--accept-license' -Wait
+Start-Process -FilePath $out -ArgumentList 'install','--quiet','--accept-license','--always-run-service' -Wait
 Remove-Item $out -Force -ErrorAction SilentlyContinue
 `
 	cmd := exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-Command", ps)
@@ -336,7 +338,42 @@ func scheduleResumeAfterRestart(installDir string) {
 	exec.Command("cmd", "/c", regCmd).Run()
 }
 
+func preConfigureDockerDesktop() {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	appData := os.Getenv("APPDATA")
+	if appData == "" {
+		return
+	}
+	dockerDir := filepath.Join(appData, "Docker")
+	os.MkdirAll(dockerDir, 0o755)
+	settingsPath := filepath.Join(dockerDir, "settings.json")
+
+	settings := make(map[string]any)
+	if data, err := os.ReadFile(settingsPath); err == nil {
+		json.Unmarshal(data, &settings)
+	}
+
+	settings["analyticsEnabled"] = false
+	settings["autoStart"] = true
+	settings["displayedWelcomeMessage"] = true
+	settings["licenseTermsVersion"] = 2
+	settings["subscriptionTermsAccepted"] = true
+
+	data, _ := json.MarshalIndent(settings, "", "  ")
+	os.WriteFile(settingsPath, data, 0o644)
+}
+
 func launchDockerDesktop() {
+	if !dockerLaunched {
+		preConfigureDockerDesktop()
+		if runtime.GOOS == "windows" {
+			exec.Command("taskkill", "/IM", "Docker Desktop.exe", "/F").Run()
+			time.Sleep(3 * time.Second)
+		}
+		dockerLaunched = true
+	}
 	for _, p := range dockerDesktopPaths() {
 		if _, err := os.Stat(p); err == nil {
 			exec.Command(p).Start()

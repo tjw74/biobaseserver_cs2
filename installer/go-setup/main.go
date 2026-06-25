@@ -79,10 +79,18 @@ func main() {
 	}
 
 	if !dockerRunning() {
+		launchDockerDesktop()
 		fmt.Println("       Waiting for Docker engine to start...")
 		if !waitForDocker(180) {
-			fmt.Println("       Docker engine did not start.")
-			fmt.Println("       Open Docker Desktop, then run this setup again.")
+			// Docker installed but engine won't start — needs restart for WSL2
+			fmt.Println()
+			fmt.Println("       Windows must restart to finish Docker setup.")
+			fmt.Println("       Setup will resume automatically after restart.")
+			scheduleResumeAfterRestart(installDir)
+			fmt.Println()
+			fmt.Println("       Restarting in 10 seconds...")
+			time.Sleep(10 * time.Second)
+			exec.Command("shutdown", "/r", "/t", "0").Run()
 			return
 		}
 	}
@@ -272,6 +280,38 @@ func waitForPort(addr string, timeoutSec int) bool {
 		time.Sleep(5 * time.Second)
 	}
 	return false
+}
+
+func scheduleResumeAfterRestart(installDir string) {
+	// Copy ourselves to the install dir so the RunOnce key survives Downloads cleanup
+	self, err := os.Executable()
+	if err != nil {
+		return
+	}
+	dest := filepath.Join(installDir, "BioBase_CS2_Server_Setup.exe")
+	if self != dest {
+		data, err := os.ReadFile(self)
+		if err == nil {
+			os.WriteFile(dest, data, 0o755)
+		}
+	}
+	// RunOnce key — Windows runs this once on next login, then deletes the key
+	regCmd := fmt.Sprintf(`reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v BioBaseCS2Setup /t REG_SZ /d "\"%s\"" /f`, dest)
+	exec.Command("cmd", "/c", regCmd).Run()
+}
+
+func launchDockerDesktop() {
+	paths := []string{
+		filepath.Join(os.Getenv("ProgramFiles"), "Docker", "Docker", "Docker Desktop.exe"),
+		filepath.Join(os.Getenv("ProgramFiles(x86)"), "Docker", "Docker", "Docker Desktop.exe"),
+		filepath.Join(os.Getenv("LOCALAPPDATA"), "Docker", "Docker Desktop.exe"),
+	}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			exec.Command(p).Start()
+			return
+		}
+	}
 }
 
 func step(format string, args ...any) {

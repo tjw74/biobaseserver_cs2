@@ -2,10 +2,13 @@ package main
 
 import (
 	"archive/zip"
+	"bufio"
 	"bytes"
+	"crypto/rand"
 	_ "embed"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"os"
 	"os/exec"
@@ -14,6 +17,8 @@ import (
 	"strings"
 	"time"
 )
+
+var stdin = bufio.NewReader(os.Stdin)
 
 //go:embed server.zip
 var serverZip []byte
@@ -25,6 +30,13 @@ const banner = `
 `
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("\n  [ERROR] Unexpected error: %v\n", r)
+			waitExit()
+		}
+	}()
+
 	fmt.Println(banner)
 
 	installDir := defaultInstallDir()
@@ -126,32 +138,24 @@ func defaultInstallDir() string {
 
 func prompt(label, defaultVal string) string {
 	fmt.Printf("%s [%s]: ", label, defaultVal)
-	var input string
-	fmt.Scanln(&input)
-	input = strings.TrimSpace(input)
-	if input == "" {
+	line, _ := stdin.ReadString('\n')
+	line = strings.TrimRight(line, "\r\n")
+	if line == "" {
 		return defaultVal
 	}
-	return input
+	return line
 }
 
 func randomPassword() string {
 	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, 16)
-	f, err := os.Open("/dev/urandom")
-	if err != nil {
-		// Fallback for Windows
-		t := time.Now().UnixNano()
-		for i := range b {
-			t = t*6364136223846793005 + 1442695040888963407
-			b[i] = chars[int(t>>33)%len(chars)]
-		}
-		return string(b)
-	}
-	defer f.Close()
-	f.Read(b)
 	for i := range b {
-		b[i] = chars[int(b[i])%len(chars)]
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+		if err != nil {
+			b[i] = chars[i%len(chars)]
+			continue
+		}
+		b[i] = chars[n.Int64()]
 	}
 	return string(b)
 }
@@ -284,5 +288,5 @@ func fatal(format string, args ...any) {
 
 func waitExit() {
 	fmt.Println("\n  Press Enter to close.")
-	fmt.Scanln()
+	stdin.ReadString('\n')
 }
